@@ -48,6 +48,23 @@ const hooks: RuntimeHooks = {
 };
 
 describe("JsRuntime global disposal", () => {
+	it("keeps the host URL constructor when a persistent guest declaration shadows it", async () => {
+		const descriptor = Object.getOwnPropertyDescriptor(globalThis, "URL")!;
+		const hostURL = globalThis.URL;
+		const runtime = new JsRuntime({ initialCwd: process.cwd(), sessionId: "guest-url-shadow" });
+		try {
+			await runtime.run('const URL = "http://127.0.0.1:12345/example";', "[guest-url-shadow]", hooks);
+			expect(globalThis.URL).toBe(hostURL);
+			expect(new globalThis.URL("https://example.com/path").pathname).toBe("/path");
+			expect(await runtime.run("URL;", "[guest-url-next-cell]", hooks)).toBe("http://127.0.0.1:12345/example");
+			runtime.dispose();
+			expect(globalThis.URL).toBe(hostURL);
+		} finally {
+			runtime.dispose();
+			Object.defineProperty(globalThis, "URL", descriptor);
+		}
+	});
+
 	it("keeps newer same-realm runtime globals after disposing an older runtime", () => {
 		const globals = globalThis as Record<string, unknown>;
 		const before = snapshotGlobals();
